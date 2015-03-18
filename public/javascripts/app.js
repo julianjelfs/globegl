@@ -8,28 +8,32 @@ window.onload = function() {
     renderer.setSize(window.innerWidth, window.innerHeight);
     document.body.appendChild(renderer.domElement);
 
-    // var geometry = new THREE.SphereGeometry(0.5, 32, 32);
-    // var material = new THREE.MeshPhongMaterial();
-    // var earthMesh = new THREE.Mesh(geometry, material);
-    // scene.add(earthMesh);
-
-    // camera.position.z = 1.5;
-
-    var geometry = new THREE.BoxGeometry( 2, 2, 2 );
-    // var geometry = new THREE.SphereGeometry(5, 32, 32);
-    // var material = new THREE.MeshBasicMaterial( { color: 0x00ff00 } );
+    var geometry = new THREE.SphereGeometry(0.5, 32, 32);
     var material = new THREE.MeshPhongMaterial();
-    var cube = new THREE.Mesh( geometry, material );
-    var light = new THREE.AmbientLight( 0x888888 ); // soft white light
-    scene.add( light );
-    scene.add( cube );
+    material.map = THREE.ImageUtils.loadTexture('images/earthmap1k.jpg');
+    material.bumpMap = THREE.ImageUtils.loadTexture('images/earthbump1k.jpg');
+    material.bumpScale = 0.1;
+    material.specularMap = THREE.ImageUtils.loadTexture('images/earthspec1k.jpg');
+    material.specular = new THREE.Color('grey');
 
-    camera.position.z = 5;
+
+    var sphere = new THREE.Mesh( geometry, material );
+
+    var light = new THREE.PointLight( 0xffffff, 2, 100 );
+    light.position.set( 50, 50, 50 );
+    scene.add( light );
+
+    var light2 = new THREE.AmbientLight( 0xffffff );
+    scene.add( light2 );
+
+    scene.add( sphere );
+
+    camera.position.z = 2;
 
     function render() {
         requestAnimationFrame(render);
-        cube.rotation.x += 0.01;
-        cube.rotation.y += 0.01;
+        sphere.rotation.y += 0.005;
+        // sphere.rotation.x += 0.005;
         renderer.render(scene, camera);
     }
 
