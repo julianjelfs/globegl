@@ -10,10 +10,10 @@ window.onload = function() {
 
     var geometry = new THREE.SphereGeometry(0.5, 32, 32);
     var material = new THREE.MeshPhongMaterial();
-    material.map = THREE.ImageUtils.loadTexture('images/earthmap1k.jpg');
-    material.bumpMap = THREE.ImageUtils.loadTexture('images/earthbump1k.jpg');
+    material.map = THREE.ImageUtils.loadTexture('images/earthmap4k.jpg');
+    material.bumpMap = THREE.ImageUtils.loadTexture('images/earthbump4k.jpg');
     material.bumpScale = 0.1;
-    material.specularMap = THREE.ImageUtils.loadTexture('images/earthspec1k.jpg');
+    material.specularMap = THREE.ImageUtils.loadTexture('images/earthspec4k.jpg');
     material.specular = new THREE.Color('grey');
 
 
