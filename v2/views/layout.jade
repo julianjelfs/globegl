@@ -1,88 +1,12 @@
-doctype html(lang='en')
-head
-    title WebGL Globe
-    |     
-    meta(charset='utf-8')
-  |   
-  body
-    #container
-    |   
-    #info
-      strong
-        a(href='http://www.chromeexperiments.com/globe') WebGL Globe
-      |  
-      span.bull &bull;
-      | &nbsp;Created by the Google Data Arts Team 
-      span.bull &bull;
-      |  Data acquired from 
-      a(href='http://sedac.ciesin.columbia.edu/gpw/') SEDAC
-    |   
-    #currentInfo
-      span#year1990.year 1990
-      |     
-      span#year1995.year 1995
-      |     
-      span#year2000.year 2000
-    |   
-    #title
-      | World Population
-    |   
-    a#ce(href='http://www.chromeexperiments.com/globe')
-      span This is a Chrome Experiment
-    |   
-    script(type='text/javascript', src='third-party/Detector.js')
-    |   
-    script(type='text/javascript', src='third-party/three.min.js')
-    |   
-    script(type='text/javascript', src='third-party/Tween.js')
-    |   
-    script(type='text/javascript', src='globe.js')
-    |   
-    script(type='text/javascript').
-      if(!Detector.webgl){
-      Detector.addGetWebGLMessage();
-      } else {
-      var years = ['1990','1995','2000'];
-      var container = document.getElementById('container');
-      var globe = new DAT.Globe(container);
-      console.log(globe);
-      var i, tweens = [];
-      var settime = function(globe, t) {
-      return function() {
-      new TWEEN.Tween(globe).to({time: t/years.length},500).easing(TWEEN.Easing.Cubic.EaseOut).start();
-      var y = document.getElementById('year'+years[t]);
-      if (y.getAttribute('class') === 'year active') {
-      return;
-      }
-      var yy = document.getElementsByClassName('year');
-      for(i=0; i<yy.length; i++) {
-      yy[i].setAttribute('class','year');
-      }
-      y.setAttribute('class', 'year active');
-      };
-      };
-      for(var i = 0; i<years.length; i++) {
-      var y = document.getElementById('year'+years[i]);
-      y.addEventListener('mouseover', settime(globe,i), false);
-      }
-      var xhr;
-      TWEEN.start();
-      xhr = new XMLHttpRequest();
-      xhr.open('GET', '/globe/population909500.json', true);
-      xhr.onreadystatechange = function(e) {
-      if (xhr.readyState === 4) {
-      if (xhr.status === 200) {
-      var data = JSON.parse(xhr.responseText);
-      window.data = data;
-      for (i=0;i<data.length;i++) {
-      globe.addData(data[i][1], {format: 'magnitude', name: data[i][0], animated: true});
-      }
-      globe.createPoints();
-      settime(globe,0)();
-      globe.animate();
-      document.body.style.backgroundImage = 'none'; // remove loading
-      }
-      }
-      };
-      xhr.send(null);
-      }
+doctype html
+html
+  head
+    title= title
+    link(rel='stylesheet', href='/stylesheets/style.css')
+    script(type='text/javascript', src='javascripts/third-party/Detector.js')
+    script(src='https://cdnjs.cloudflare.com/ajax/libs/three.js/r71/three.js')
+    script(type='text/javascript', src='javascripts/third-party/Tween.js')
+    script(type='text/javascript', src='javascripts/globe.js')
+    script(type='text/javascript', src='javascripts/app.js')
+    body
+    block content
