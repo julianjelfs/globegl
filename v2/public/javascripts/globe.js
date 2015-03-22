@@ -13,20 +13,36 @@
 
 var DAT = DAT || {};
 
-DAT.Globe = function(container, opts) {
-  opts = opts || {};
-  
-  var colorFn = opts.colorFn || function(x) {
+DAT.Globe = function(container, colorFn) {
+
+  colorFn = colorFn || function(x) {
     var c = new THREE.Color();
-    c.setHSL( ( 0.6 - ( x * 0.5 ) ), 1.0, 0.5 );
+    c.setHSV( ( 0.6 - ( x * 0.5 ) ), 1.0, 1.0 );
     return c;
   };
-  var imgDir = opts.imgDir || '/globe/';
 
   var Shaders = {
+    'atmosphere' : {
+      uniforms: {},
+      vertexShader: [
+        'varying vec3 vNormal;',
+        'void main() {',
+          'vNormal = normalize( normalMatrix * normal );',
+          'gl_Position = projectionMatrix * modelViewMatrix * vec4( position, 1.0 );',
+        '}'
+      ].join('\n'),
+      fragmentShader: [
+        'varying vec3 vNormal;',
+        'void main() {',
+          'float intensity = pow( 0.8 - dot( vNormal, vec3( 0, 0, 1.0 ) ), 16.0 );',
+          'gl_FragColor = vec4(1.0);',
+          'gl_FragColor.a = intensity;',
+        '}'
+      ].join('\n')
+    },
     'earth' : {
       uniforms: {
-        'texture': { type: 't', value: null }
+        'texture': { type: 't', value: 0, texture: null }
       },
       vertexShader: [
         'varying vec3 vNormal;',
@@ -43,35 +59,42 @@ DAT.Globe = function(container, opts) {
         'varying vec2 vUv;',
         'void main() {',
           'vec3 diffuse = texture2D( texture, vUv ).xyz;',
-          'float intensity = 1.05 - dot( vNormal, vec3( 0.0, 0.0, 1.0 ) );',
-          'vec3 atmosphere = vec3( 1.0, 1.0, 1.0 ) * pow( intensity, 3.0 );',
-          'gl_FragColor = vec4( diffuse + atmosphere, 1.0 );',
+          'float intensity = pow(1.05 - dot( vNormal, vec3( 0.0, 0.0, 1.0 ) ), 4.0);',
+          'float i = 0.8-pow(clamp(dot( vNormal, vec3( 0, 0, 1.0 )), 0.0, 1.0), 1.5);',
+          'vec3 atmosphere = vec3( 1.0, 1.0, 1.0 ) * intensity;',
+          'float d = clamp(pow(max(0.0,(diffuse.r-0.062)*10.0), 2.0)*5.0, 0.0, 1.0);',
+          'gl_FragColor = vec4( (d*vec3(i)) + ((1.0-d)*diffuse) + atmosphere, 1.0 );',
         '}'
       ].join('\n')
     },
-    'atmosphere' : {
+    'continents' : {
       uniforms: {},
       vertexShader: [
         'varying vec3 vNormal;',
         'void main() {',
-          'vNormal = normalize( normalMatrix * normal );',
-          'gl_Position = projectionMatrix * modelViewMatrix * vec4( position, 1.0 );',
+          'vec4 pos = projectionMatrix * modelViewMatrix * vec4( position, 1.0 );',
+          'vNormal = normalize( normalMatrix * normalize( position ));',
+          'gl_Position = pos;',
         '}'
       ].join('\n'),
       fragmentShader: [
         'varying vec3 vNormal;',
         'void main() {',
-          'float intensity = pow( 0.8 - dot( vNormal, vec3( 0, 0, 1.0 ) ), 12.0 );',
-          'gl_FragColor = vec4( 1.0, 1.0, 1.0, 1.0 ) * intensity;',
+          'float i = 0.8-pow(clamp(dot( vNormal, vec3( 0, 0, 1.0 )), 0.0, 1.0), 0.7);',
+          'gl_FragColor = vec4(i);',
+          'gl_FragColor.a = 1.0;',
+          // 'gl_FragColor = vec4(0, 0, 0.6, 0.6);',
         '}'
       ].join('\n')
     }
   };
 
-  var camera, scene, renderer, w, h;
-  var mesh, atmosphere, point;
+  var camera, scene, sceneAtmosphere, renderer, w, h;
+  var vector, mesh, atmosphere, point;
 
   var overRenderer;
+
+  var imgDir = '';
 
   var curZoomSpeed = 0;
   var zoomSpeed = 50;
@@ -81,7 +104,7 @@ DAT.Globe = function(container, opts) {
       target = { x: Math.PI*3/2, y: Math.PI / 6.0 },
       targetOnDown = { x: 0, y: 0 };
 
-  var distance = 100000, distanceTarget = 100000;
+  var distance = 100000, distanceTarget = 1200;
   var padding = 40;
   var PI_HALF = Math.PI / 2;
 
@@ -91,24 +114,33 @@ DAT.Globe = function(container, opts) {
     container.style.font = '13px/20px Arial, sans-serif';
 
     var shader, uniforms, material;
-    w = container.offsetWidth || window.innerWidth;
-    h = container.offsetHeight || window.innerHeight;
+    w = window.innerWidth;
+    h = window.innerHeight;
 
-    camera = new THREE.PerspectiveCamera(30, w / h, 1, 10000);
+    camera = new THREE.Camera(
+        30, w / h, 1, 10000);
     camera.position.z = distance;
 
-    scene = new THREE.Scene();
+    vector = new THREE.Vector3();
 
-    var geometry = new THREE.SphereGeometry(200, 40, 30);
+    scene = new THREE.Scene();
+    sceneAtmosphere = new THREE.Scene();
+
+    projector = new THREE.Projector();
+    var PI2 = Math.PI * 2;
+    particleMaterial = new THREE.ParticleBasicMaterial( {
+      color: 0x000000
+    } );
+
+    var geometry = new THREE.Sphere(200, 40, 30);
 
     shader = Shaders['earth'];
     uniforms = THREE.UniformsUtils.clone(shader.uniforms);
 
-    // uniforms['texture'].value = THREE.ImageUtils.loadTexture(imgDir+'world.jpg');
-    //replace existing world image with a more realistic one
-    uniforms['texture'].value = THREE.ImageUtils.loadTexture(imgDir+'earthmap4k.jpg');
+    uniforms['texture'].texture = THREE.ImageUtils.loadTexture(imgDir+'world' +
+        '.jpg');
 
-    material = new THREE.ShaderMaterial({
+    material = new THREE.MeshShaderMaterial({
 
           uniforms: uniforms,
           vertexShader: shader.vertexShader,
@@ -117,36 +149,121 @@ DAT.Globe = function(container, opts) {
         });
 
     mesh = new THREE.Mesh(geometry, material);
-    mesh.rotation.y = Math.PI;
-    scene.add(mesh);
+    mesh.matrixAutoUpdate = false;
+    scene.addObject(mesh);
+
+    function loadLineMesh(loader, material, offset) {
+      var lines = loader().children[0].children[0].attributes.Vertex.elements;
+      var lineGeo = new THREE.Geometry();
+      for (var i=0; i<lines.length; i+=3) {
+        lineGeo.vertices.push(new THREE.Vertex(new THREE.Vector3(lines[i], lines[i+1], lines[i+2])));
+      }
+      var lineMesh = new THREE.Line(lineGeo, material);
+      lineMesh.type = THREE.Lines;
+      lineMesh.scale.x = lineMesh.scale.y = lineMesh.scale.z = 0.0000319 + offset * 0.0000001;
+      lineMesh.rotation.x = -Math.PI/2;
+      lineMesh.rotation.z = Math.PI;
+      lineMesh.matrixAutoUpdate = false;
+      lineMesh.updateMatrix();
+      return lineMesh;
+    }
+
+    function loadTriMesh(loader, material) {
+      var lines = loader().children[0].children[0].attributes.Vertex.elements;
+      var lineGeo = new THREE.Geometry();
+      var i = 0;
+      for (i=0; i<lines.length; i+=3) {
+        lineGeo.vertices.push(
+          new THREE.Vertex(
+            new THREE.Vector3(lines[i], lines[i+1], lines[i+2])
+          )
+        );
+      }
+      for (i=0; i<lines.length/3; i+=3) {
+        lineGeo.faces.push(new THREE.Face3(i, i+1, i+2, null, null));
+      }
+      lineGeo.computeCentroids();
+      lineGeo.computeFaceNormals();
+      lineGeo.computeVertexNormals();
+      lineGeo.computeBoundingSphere();
+      var lineMesh = new THREE.Mesh(lineGeo, material);
+      lineMesh.type = THREE.Triangles;
+      lineMesh.scale.x = lineMesh.scale.y = lineMesh.scale.z = 0.0000319;
+      lineMesh.rotation.x = -Math.PI/2;
+      lineMesh.rotation.z = Math.PI;
+      lineMesh.matrixAutoUpdate = false;
+      lineMesh.doubleSided = true;
+      lineMesh.updateMatrix();
+      return lineMesh;
+    }
+
+
+    shader = Shaders['continents'];
+    uniforms = THREE.UniformsUtils.clone(shader.uniforms);
+
+    material = new THREE.MeshShaderMaterial({
+
+          uniforms: uniforms,
+          vertexShader: shader.vertexShader,
+          fragmentShader: shader.fragmentShader
+
+        });
+
+    scene.addObject(loadTriMesh(getWorld, material));
 
     shader = Shaders['atmosphere'];
     uniforms = THREE.UniformsUtils.clone(shader.uniforms);
 
-    material = new THREE.ShaderMaterial({
+    material = new THREE.MeshShaderMaterial({
 
           uniforms: uniforms,
           vertexShader: shader.vertexShader,
-          fragmentShader: shader.fragmentShader,
-          side: THREE.BackSide,
-          blending: THREE.AdditiveBlending,
-          transparent: true
+          fragmentShader: shader.fragmentShader
 
         });
 
     mesh = new THREE.Mesh(geometry, material);
-    mesh.scale.set( 1.1, 1.1, 1.1 );
-    scene.add(mesh);
+    mesh.scale.x = mesh.scale.y = mesh.scale.z = 1.1;
+    mesh.flipSided = true;
+    mesh.matrixAutoUpdate = false;
+    mesh.updateMatrix();
+    sceneAtmosphere.addObject(mesh);
 
-    geometry = new THREE.BoxGeometry(0.75, 0.75, 1);
-    geometry.applyMatrix(new THREE.Matrix4().makeTranslation(0,0,-0.5));
+    sceneAtmosphere.addObject(loadLineMesh(getCoast, new THREE.LineBasicMaterial({
+      linewidth: 3,
+      // color:0x0088ff, opacity: 0.8
+      color:0xff7802, opacity: 0.8
+    }), -2));
+    sceneAtmosphere.addObject(loadLineMesh(getCoast, new THREE.LineBasicMaterial({
+      linewidth:1,
+      color:0xcccccc, opacity: 0.4
+    }), 0.5));
+
+
+    geometry = new THREE.Cube(0.75, 0.75, 1, 1, 1, 1, null, false, { px: true,
+          nx: true, py: true, ny: true, pz: false, nz: true});
+
+    for (var i = 0; i < geometry.vertices.length; i++) {
+
+      var vertex = geometry.vertices[i];
+      vertex.position.z += 0.5;
+
+    }
 
     point = new THREE.Mesh(geometry);
 
     renderer = new THREE.WebGLRenderer({antialias: true});
+    renderer.autoClear = false;
+    renderer.setClearColorHex(0x000000, 0.0);
     renderer.setSize(w, h);
 
     renderer.domElement.style.position = 'absolute';
+
+    // var coastLine = getCoast();
+
+    this.is_animated = false;
+    this._baseGeometry = new THREE.Geometry();
+    createPoints();
 
     container.appendChild(renderer.domElement);
 
@@ -167,12 +284,13 @@ DAT.Globe = function(container, opts) {
     }, false);
   }
 
-  function addData(data, opts) {
+  addData = function(data, opts) {
     var lat, lng, size, color, i, step, colorFnWrapper;
 
     opts.animated = opts.animated || false;
     this.is_animated = opts.animated;
     opts.format = opts.format || 'magnitude'; // other option is 'legend'
+    console.log(opts.format);
     if (opts.format === 'magnitude') {
       step = 3;
       colorFnWrapper = function(data, i) { return colorFn(data[i+2]); }
@@ -243,34 +361,45 @@ DAT.Globe = function(container, opts) {
               morphTargets: true
             }));
       }
-      scene.add(this.points);
+      scene.addObject(this.points);
     }
   }
 
-  function addPoint(lat, lng, size, color, subgeo) {
-
-    var phi = (90 - lat) * Math.PI / 180;
-    var theta = (180 - lng) * Math.PI / 180;
-
-    point.position.x = 200 * Math.sin(phi) * Math.cos(theta);
-    point.position.y = 200 * Math.cos(phi);
-    point.position.z = 200 * Math.sin(phi) * Math.sin(theta);
+  function addPointXYZ(x, y, z, size, color, subgeo) {
+    point.position.x = x;
+    point.position.y = y;
+    point.position.z = z;
 
     point.lookAt(mesh.position);
 
-    point.scale.z = Math.max( size, 0.1 ); // avoid non-invertible matrix
+    point.scale.z = -size;
     point.updateMatrix();
 
-    for (var i = 0; i < point.geometry.faces.length; i++) {
+    var i;
+    for (i = 0; i < point.geometry.faces.length; i++) {
 
       point.geometry.faces[i].color = color;
 
     }
-    if(point.matrixAutoUpdate){
-      point.updateMatrix();
-    }
-    subgeo.merge(point.geometry, point.matrix);
+
+    GeometryUtils.merge(subgeo, point);
   }
+
+  function addPoint(lat, lng, size, color, subgeo) {
+    var phi = (90 - lat) * Math.PI / 180;
+    var theta = (180 - lng) * Math.PI / 180;
+
+    var x = 200 * Math.sin(phi) * Math.cos(theta);
+    var y = 200 * Math.cos(phi);
+    var z = 200 * Math.sin(phi) * Math.sin(theta);
+
+    return addPointXYZ(x,y,z,size,color,subgeo);
+  }
+
+  function addPointAt(p, size, color, subgeo) {
+    return addPointXYZ(p.x, p.y, p.z, size, color, subgeo);
+  }
+
 
   function onMouseDown(event) {
     event.preventDefault();
@@ -285,27 +414,73 @@ DAT.Globe = function(container, opts) {
     targetOnDown.x = target.x;
     targetOnDown.y = target.y;
 
+    clickEnabled = true;
+
     container.style.cursor = 'move';
+
   }
 
   function onMouseMove(event) {
     mouse.x = - event.clientX;
     mouse.y = event.clientY;
 
+    var dx = mouseOnDown.x - (-event.clientX);
+    var dy = mouseOnDown.y - event.clientY;
+    var d = Math.sqrt(dx*dx + dy*dy);
+    if (d > 5) {
+      clickEnabled = false;
+    }
+
     var zoomDamp = distance/1000;
 
-    target.x = targetOnDown.x + (mouse.x - mouseOnDown.x) * 0.005 * zoomDamp;
-    target.y = targetOnDown.y + (mouse.y - mouseOnDown.y) * 0.005 * zoomDamp;
+    target.x = targetOnDown.x + (mouse.x - mouseOnDown.x) * 0.01 * zoomDamp;
+    target.y = targetOnDown.y + (mouse.y - mouseOnDown.y) * 0.01 * zoomDamp;
 
     target.y = target.y > PI_HALF ? PI_HALF : target.y;
     target.y = target.y < - PI_HALF ? - PI_HALF : target.y;
   }
+
+  lastClick = 0;
 
   function onMouseUp(event) {
     container.removeEventListener('mousemove', onMouseMove, false);
     container.removeEventListener('mouseup', onMouseUp, false);
     container.removeEventListener('mouseout', onMouseOut, false);
     container.style.cursor = 'auto';
+
+    if (clickEnabled) {
+      var t = new Date().getTime();
+      var dblClick = (t-lastClick < 300);
+      lastClick = t;
+
+      var vector = new THREE.Vector3( ( event.clientX / window.innerWidth ) * 2 - 1, - ( event.clientY / window.innerHeight ) * 2 + 1, 0.5 );
+      projector.unprojectVector( vector, camera );
+
+      var ray = new THREE.Ray( camera.position, vector.subSelf( camera.position ).normalize() );
+
+      var intersects = ray.intersectScene( scene );
+      if ( intersects.length > 0 ) {
+
+        if (intersects[0].object.is_a_point) {
+          if (dblClick) {
+            scene.removeObject(intersects[0].object);
+          } else {
+            intersects[0].object.materials[0].color.setHex( Math.random() * 0xffffff );
+          }
+        } else if (dblClick) {
+          var p = intersects[ 0 ].point;
+          var geometry = new THREE.Cube(4,4,4,4,4,4);
+          var point = new THREE.Mesh(geometry, new THREE.MeshBasicMaterial({
+            color: 0xff00ff
+          }));
+          point.position = p;
+          point.is_a_point = true;
+          scene.addObject(point);
+        }
+
+      }
+    }
+
   }
 
   function onMouseOut(event) {
@@ -336,9 +511,10 @@ DAT.Globe = function(container, opts) {
   }
 
   function onWindowResize( event ) {
-    camera.aspect = container.offsetWidth / container.offsetHeight;
+    console.log('resize');
+    camera.aspect = window.innerWidth / window.innerHeight;
     camera.updateProjectionMatrix();
-    renderer.setSize( container.offsetWidth, container.offsetHeight );
+    renderer.setSize( window.innerWidth, window.innerHeight );
   }
 
   function zoom(delta) {
@@ -346,26 +522,31 @@ DAT.Globe = function(container, opts) {
     distanceTarget = distanceTarget > 1000 ? 1000 : distanceTarget;
     distanceTarget = distanceTarget < 350 ? 350 : distanceTarget;
   }
-
-  function animate() {
+  var time = Date.now();
+  function animate(t) {
     requestAnimationFrame(animate);
-    render();
+    t = t || Date.now();
+    render(t-time);
+    time = t;
   }
 
-  function render() {
+  function render(dt) {
     zoom(curZoomSpeed);
 
     rotation.x += (target.x - rotation.x) * 0.1;
     rotation.y += (target.y - rotation.y) * 0.1;
     distance += (distanceTarget - distance) * 0.3;
+    // target.x -= 0.003 * Math.min(33,dt)/16;
 
     camera.position.x = distance * Math.sin(rotation.x) * Math.cos(rotation.y);
     camera.position.y = distance * Math.sin(rotation.y);
     camera.position.z = distance * Math.cos(rotation.x) * Math.cos(rotation.y);
 
-    camera.lookAt(mesh.position);
+    vector.copy(camera.position);
 
+    renderer.clear();
     renderer.render(scene, camera);
+    renderer.render(sceneAtmosphere, camera);
   }
 
   init();
