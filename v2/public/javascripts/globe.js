@@ -13,9 +13,9 @@
 
 var DAT = DAT || {};
 
-DAT.Globe = function(container, colorFn) {
+DAT.Globe = function(container, opts) {
 
-  colorFn = colorFn || function(x) {
+  colorFn = opts.colorFn || function(x) {
     var c = new THREE.Color();
     c.setHSV( ( 0.6 - ( x * 0.5 ) ), 1.0, 1.0 );
     return c;
@@ -83,7 +83,8 @@ DAT.Globe = function(container, colorFn) {
           'float i = 0.8-pow(clamp(dot( vNormal, vec3( 0, 0, 1.0 )), 0.0, 1.0), 0.7);',
           'gl_FragColor = vec4(i);',
           'gl_FragColor.a = 1.0;',
-          // 'gl_FragColor = vec4(0, 0, 0.6, 0.6);',
+          // 'gl_FragColor = vec4(0.318, 0.5333, 0.8392, 1);',  //blue
+          'gl_FragColor = vec4(1, 0.47059, 0.007843, 0.3);',  //orange
         '}'
       ].join('\n')
     }
@@ -94,7 +95,7 @@ DAT.Globe = function(container, colorFn) {
 
   var overRenderer;
 
-  var imgDir = '';
+  var imgDir = opts.imgDir || '';
 
   var curZoomSpeed = 0;
   var zoomSpeed = 50;
@@ -231,9 +232,10 @@ DAT.Globe = function(container, colorFn) {
 
     sceneAtmosphere.addObject(loadLineMesh(getCoast, new THREE.LineBasicMaterial({
       linewidth: 3,
-      // color:0x0088ff, opacity: 0.8
-      color:0xff7802, opacity: 0.8
-    }), -2));
+      // color:0x0088ff, opacity: 0.8   
+      // color:0xff7802, opacity: 0.8
+      color:0x5188d6, opacity: 0.8
+    }), -1));
     sceneAtmosphere.addObject(loadLineMesh(getCoast, new THREE.LineBasicMaterial({
       linewidth:1,
       color:0xcccccc, opacity: 0.4
