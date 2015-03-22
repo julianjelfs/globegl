@@ -6,11 +6,11 @@ if(!Detector.webgl){
     // var years = ['1990','1995','2000'];
     var container = document.getElementById('container');
     var globe = new DAT.Globe(container, {imgDir:'images/'});
-    // globe.animate();
+    globe.animate();
 
     console.log(globe);
 
-    var xhr;
+    /*var xhr;
 
 
     xhr = new XMLHttpRequest();
@@ -29,6 +29,6 @@ if(!Detector.webgl){
             }
         }
     };
-    xhr.send(null);
+    xhr.send(null);*/
 }
 }
