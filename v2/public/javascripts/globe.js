@@ -84,7 +84,7 @@ DAT.Globe = function(container, opts) {
           'gl_FragColor = vec4(i);',
           'gl_FragColor.a = 1.0;',
           // 'gl_FragColor = vec4(0.318, 0.5333, 0.8392, 1);',  //blue
-          'gl_FragColor = vec4(1, 0.47059, 0.007843, 0.3);',  //orange
+          'gl_FragColor = vec4(1, 0.47059, 0.007843, 0.5);',  //orange
         '}'
       ].join('\n')
     }
@@ -235,7 +235,7 @@ DAT.Globe = function(container, opts) {
       // color:0x0088ff, opacity: 0.8   
       // color:0xff7802, opacity: 0.8
       color:0x5188d6, opacity: 0.8
-    }), -1));
+    }), -2));
     sceneAtmosphere.addObject(loadLineMesh(getCoast, new THREE.LineBasicMaterial({
       linewidth:1,
       color:0xcccccc, opacity: 0.4
